@@ -1,0 +1,29 @@
+{
+  "python.autoComplete.extraPaths": [
+    "/opt/ros/humble/lib/python3.8/site-packages",
+  ],
+  "python.analysis.extraPaths": [
+    "/opt/ros/humble/lib/python3.8/site-packages"
+  ],
+  "[cpp]": {
+    "editor.tabSize": 2,
+  },
+  "[xml]": {
+    "editor.tabSize": 2,
+    "files.trimFinalNewlines": true,
+    "editor.defaultFormatter": "redhat.vscode-xml",
+  },
+  "xml.format.splitAttributes": "splitNewLine",
+  "editor.formatOnSave": true,
+  "files.associations": {
+    "*.repos": "yaml",
+    "*.cpp": "cpp",
+    "*.hpp": "cpp",
+    "string": "cpp",
+    "set": "cpp"
+  },
+  "cSpell.words": [
+    "rclcpp",
+    "rosout"
+  ],
+}

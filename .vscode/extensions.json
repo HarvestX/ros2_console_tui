@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "ms-python.flake8",
+    "redhat.vscode-xml",
+    "jeff-hykin.better-cpp-syntax",
+    "ms-vscode.cpptools-extension-pack",
+    "gruntfuggly.todo-tree",
+    "visualstudioexptteam.vscodeintellicode",
+    "streetsidesoftware.code-spell-checker",
+    "qiumingge.cpp-check-lint"
+  ]
+}

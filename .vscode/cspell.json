@@ -1,0 +1,11 @@
+{
+  "language": "en",
+  "version": "0.2",
+  "words": [
+    "colcon",
+    "coveragepy",
+    "distro",
+    "osrf",
+    "vcstool"
+  ]
+}
