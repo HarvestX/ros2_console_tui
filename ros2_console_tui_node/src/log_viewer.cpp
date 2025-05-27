@@ -13,29 +13,21 @@
 // limitations under the License.
 
 #include <fstream>
-#include <ros2_console_tui_node/log_viewer.hpp>
+#include "ros2_console_tui_node/log_viewer.hpp"
 
 namespace ros2_console_tui_node
 {
-std::atomic<bool> LogViewer::resize_requested_{false};
+std::atomic<bool> LogViewerTui::resize_requested_{false};
 
-LogViewer::LogViewer(const rclcpp::NodeOptions options)
-: rclcpp::Node("log_viewer", options),
-  BUFF_SIZE(1000),
-  display_logs_(BUFF_SIZE),
-  pending_logs_(BUFF_SIZE)
+LogViewerTui::LogViewerTui(const rclcpp::NodeOptions options)
+: LogViewerBase(options),
+  display_logs_(BUFF_SIZE)
 {
   filtered_logs_.reserve(BUFF_SIZE);
   load_config();
-
-  rclcpp::QoS qos(rclcpp::KeepLast(100));
-  qos.reliable();
-  using namespace std::chrono_literals;
-  this->sub_ = this->create_subscription<rcl_interfaces::msg::Log>(
-    "/rosout", qos, std::bind(&LogViewer::log_callback, this, std::placeholders::_1));
 }
 
-void LogViewer::load_config()
+void LogViewerTui::load_config()
 {
   try {
     std::filesystem::path config_path =
@@ -61,19 +53,8 @@ void LogViewer::load_config()
   }
 }
 
-void LogViewer::log_callback(const rcl_interfaces::msg::Log::SharedPtr msg)
-{
-  if (excluded_names_.find(msg->name) != excluded_names_.end()) return;
 
-  LogLevel msg_level = static_cast<LogLevel>(msg->level);
-  std::string level_str = level_to_string(msg_level);
-  std::string formatted = "[" + level_str + "] [" + msg->name + "]: " + msg->msg;
-
-  std::lock_guard<std::mutex> pending_logs_lock(pending_logs_mutex_);
-  pending_logs_.push_back(std::make_pair(msg_level, formatted));
-}
-
-void LogViewer::spin()
+void LogViewerTui::spin()
 {
   init_screen();
   init_key_bindings();
@@ -88,7 +69,7 @@ void LogViewer::spin()
     }
 
     int ch = getch();
-    if (ch != ERR) handle_key(ch);
+    if (ch != ERR) {handle_key(ch);}
 
     update_log_buffers();
     draw_header();
@@ -102,7 +83,7 @@ void LogViewer::spin()
   shutdown_screen();
 }
 
-void LogViewer::init_screen()
+void LogViewerTui::init_screen()
 {
   initscr();
   start_color();
@@ -120,14 +101,14 @@ void LogViewer::init_screen()
   init_pair(6, COLOR_GREEN, -1);    // STATUS BAR
 }
 
-void LogViewer::create_windows()
+void LogViewerTui::create_windows()
 {
   const auto [rows, cols] = std::pair{LINES, COLS};
   auto make_window_context = [](WINDOW * win, const std::string & label) {
-    int y, x, h, w;
-    getbegyx(win, y, x);
-    getmaxyx(win, h, w);
-    return WindowContext{
+      int y, x, h, w;
+      getbegyx(win, y, x);
+      getmaxyx(win, h, w);
+      return WindowContext{
       .handle = win,
       .row = y,
       .col = x,
@@ -135,7 +116,7 @@ void LogViewer::create_windows()
       .width = w,
       .needs_redraw = true,
       .label = label};
-  };
+    };
 
   windows_[WindowType::Header] = make_window_context(newwin(1, cols, 0, 0), "Header");
   windows_[WindowType::Footer] = make_window_context(newwin(1, cols, rows - 1, 0), "Footer");
@@ -147,7 +128,7 @@ void LogViewer::create_windows()
   windows_[WindowType::Log] = make_window_context(log_win, "Log_Viewer");
 }
 
-void LogViewer::destroy_windows()
+void LogViewerTui::destroy_windows()
 {
   for (auto & [_, ctx] : windows_) {
     if (ctx.handle) {
@@ -158,7 +139,7 @@ void LogViewer::destroy_windows()
   windows_.clear();
 }
 
-void LogViewer::refresh_windows()
+void LogViewerTui::refresh_windows()
 {
   for (auto & [_, ctx] : windows_) {
     if (ctx.needs_redraw) {
@@ -169,20 +150,20 @@ void LogViewer::refresh_windows()
   doupdate();
 }
 
-void LogViewer::shutdown_screen()
+void LogViewerTui::shutdown_screen()
 {
   endwin();
   curs_set(1);
 }
 
-void LogViewer::draw_frame()
+void LogViewerTui::draw_frame()
 {
   auto & ctx = windows_.at(WindowType::Frame);
   WINDOW * win = ctx.handle;
   box(win, 0, 0);
 }
 
-void LogViewer::draw_log_window()
+void LogViewerTui::draw_log_window()
 {
   auto & ctx = windows_.at(WindowType::Log);
   WINDOW * win = ctx.handle;
@@ -197,15 +178,17 @@ void LogViewer::draw_log_window()
     std::max(0, static_cast<int>(filtered_logs_.size()) - lines_available - scroll_offset_);
 
   for (size_t i = start_index; i < filtered_logs_.size() && row < ctx.height; ++i) {
-    const auto & [level, line] = filtered_logs_[i];
-    int color_pair = get_color_pair(level);
+    const auto & entry = filtered_logs_[i];
+    const auto & line = convert_to_string(entry);
+    if (line.empty()) {continue;}
+    int color_pair = get_color_pair(static_cast<log_viewer_base::LogLevel>(entry.level));
     wattron(win, COLOR_PAIR(color_pair));
     mvwprintw(win, row++, 0, "%s", line.c_str());
     wattroff(win, COLOR_PAIR(color_pair));
   }
 }
 
-void LogViewer::draw_header()
+void LogViewerTui::draw_header()
 {
   auto & ctx = windows_.at(WindowType::Header);
   WINDOW * win = ctx.handle;
@@ -215,13 +198,17 @@ void LogViewer::draw_header()
   const std::string title = "ROS 2 Console TUI - Log Viewer";
 
   size_t total_logs = 0;
-  for (const auto & [level, _] : display_logs_) {
-    if (should_display(level)) {
+  for (const auto & entry : display_logs_) {
+    if (should_display(static_cast<log_viewer_base::LogLevel>(entry.level))) {
       ++total_logs;
     }
   }
 
+  std::string pause_label = "Pause | ";
   std::string filter_label = "Filter: ";
+  if (is_paused()) {
+    filter_label = pause_label + filter_label;
+  }
   std::string filter_name = level_to_string(filter_level_);
   std::ostringstream scroll_stream;
   scroll_stream << " | Scroll: " << scroll_offset_ << "/" << total_logs;
@@ -232,7 +219,7 @@ void LogViewer::draw_header()
   if (state_x > static_cast<int>(title.size()) + 2) {
     mvwprintw(win, 0, state_x, "%s", filter_label.c_str());
 
-    int color_pair = get_color_pair(filter_level_);
+    int color_pair = log_viewer_base::get_color_pair(filter_level_);
     wattron(win, COLOR_PAIR(color_pair));
     wprintw(win, "%s", filter_name.c_str());
     wattroff(win, COLOR_PAIR(color_pair));
@@ -245,7 +232,7 @@ void LogViewer::draw_header()
   wattroff(win, A_BOLD);
 }
 
-void LogViewer::draw_footer()
+void LogViewerTui::draw_footer()
 {
   auto & ctx = windows_.at(WindowType::Footer);
   WINDOW * win = ctx.handle;
@@ -255,7 +242,7 @@ void LogViewer::draw_footer()
   int x = 0;
 
   for (const auto & entry : keyBindings_) {
-    if (!entry.showInStatusBar || entry.label.empty()) continue;
+    if (!entry.showInStatusBar || entry.label.empty()) {continue;}
     mvwprintw(win, 0, x, "%s", entry.label.c_str());
     x += entry.label.size() + 1;
   }
@@ -263,35 +250,34 @@ void LogViewer::draw_footer()
   wattroff(win, A_BOLD);
 }
 
-void LogViewer::update_log_buffers()
+void LogViewerTui::update_log_buffers()
 {
-  {
-    std::lock_guard<std::mutex> pending_logs_lock(pending_logs_mutex_);
-    if (!pending_logs_.empty()) {
-      windows_.at(WindowType::Header).needs_redraw = true;
-      windows_.at(WindowType::Log).needs_redraw = true;
-    }
-    for (const auto & entry : pending_logs_) {
-      display_logs_.push_back(entry);
-    }
-    pending_logs_.clear();
+  if (is_pending_logs_empty()) {
+    return;
   }
+  windows_.at(WindowType::Header).needs_redraw = true;
+  windows_.at(WindowType::Log).needs_redraw = true;
+
+  auto logs = get_pending_logs();
+  display_logs_.insert(
+    display_logs_.end(), logs.begin(), logs.end());
+  clear_pending_logs();
 
   filtered_logs_.clear();
-  for (const auto & [level, line] : display_logs_) {
-    if (should_display(level)) {
-      filtered_logs_.emplace_back(level, line);
+  for (const auto & entry : display_logs_) {
+    if (should_display(static_cast<log_viewer_base::LogLevel>(entry.level))) {
+      filtered_logs_.push_back(entry);
     }
   }
 }
 
-bool LogViewer::should_display(LogLevel level)
+bool LogViewerTui::should_display(log_viewer_base::LogLevel level)
 {
-  if (filter_level_ == LogLevel::ALL) return true;
+  if (filter_level_ == log_viewer_base::LogLevel::ALL) {return true;}
   return level == filter_level_;
 }
 
-void LogViewer::set_filter_level(LogLevel level)
+void LogViewerTui::set_filter_level(log_viewer_base::LogLevel level)
 {
   if (filter_level_ != level) {
     filter_level_ = level;
@@ -301,14 +287,21 @@ void LogViewer::set_filter_level(LogLevel level)
   }
 }
 
-void LogViewer::clear_logs()
+void LogViewerTui::clear_logs()
 {
   display_logs_.clear();
   windows_.at(WindowType::Header).needs_redraw = true;
   windows_.at(WindowType::Log).needs_redraw = true;
 }
 
-void LogViewer::scroll_up()
+void LogViewerTui::pause_logs()
+{
+  set_paused_flag(!is_paused());
+  windows_.at(WindowType::Header).needs_redraw = true;
+  windows_.at(WindowType::Log).needs_redraw = true;
+}
+
+void LogViewerTui::scroll_up()
 {
   const int max_offset = static_cast<int>(display_logs_.size());
   if (scroll_offset_ < max_offset) {
@@ -318,7 +311,7 @@ void LogViewer::scroll_up()
   }
 }
 
-void LogViewer::scroll_down()
+void LogViewerTui::scroll_down()
 {
   if (scroll_offset_ > 0) {
     scroll_offset_--;
@@ -327,7 +320,7 @@ void LogViewer::scroll_down()
   }
 }
 
-void LogViewer::handle_key(int ch)
+void LogViewerTui::handle_key(int ch)
 {
   auto it = keyBindingMap_.find(ch);
   if (it != keyBindingMap_.end()) {
@@ -335,21 +328,22 @@ void LogViewer::handle_key(int ch)
   }
 }
 
-void LogViewer::init_key_bindings()
+void LogViewerTui::init_key_bindings()
 {
   keyBindings_ = {
-    {Key::LowercaseA, "[a] All", [this]() { set_filter_level(LogLevel::ALL); }},
-    {Key::LowercaseD, "[d] Debug", [this]() { set_filter_level(LogLevel::DEBUG); }},
-    {Key::LowercaseI, "[i] Info", [this]() { set_filter_level(LogLevel::INFO); }},
-    {Key::LowercaseW, "[w] Warn", [this]() { set_filter_level(LogLevel::WARN); }},
-    {Key::LowercaseE, "[e] Error", [this]() { set_filter_level(LogLevel::ERROR); }},
-    {Key::LowercaseF, "[f] Fatal", [this]() { set_filter_level(LogLevel::FATAL); }},
-    {Key::LowercaseC, "[c] Clear", [this]() { clear_logs(); }},
-    {Key::LowercaseQ, "[q] Quit", [this]() { rclcpp::shutdown(); }},
-    {Key::LowercaseK, "Scroll Up", [this]() { scroll_up(); }, false},
-    {Key::LowercaseJ, "Scroll Down", [this]() { scroll_down(); }, false},
-    {Key::Up, "Scroll Up", [this]() { scroll_up(); }, false},
-    {Key::Down, "Scroll Down", [this]() { scroll_down(); }, false}};
+    {Key::LowercaseA, "[a] All", [this]() {set_filter_level(log_viewer_base::LogLevel::ALL);}},
+    {Key::LowercaseD, "[d] Debug", [this]() {set_filter_level(log_viewer_base::LogLevel::DEBUG);}},
+    {Key::LowercaseI, "[i] Info", [this]() {set_filter_level(log_viewer_base::LogLevel::INFO);}},
+    {Key::LowercaseW, "[w] Warn", [this]() {set_filter_level(log_viewer_base::LogLevel::WARN);}},
+    {Key::LowercaseE, "[e] Error", [this]() {set_filter_level(log_viewer_base::LogLevel::ERROR);}},
+    {Key::LowercaseF, "[f] Fatal", [this]() {set_filter_level(log_viewer_base::LogLevel::FATAL);}},
+    {Key::LowercaseP, "[p] Pause", [this]() {pause_logs();}},
+    {Key::LowercaseC, "[c] Clear", [this]() {clear_logs();}},
+    {Key::LowercaseQ, "[q] Quit", [this]() {rclcpp::shutdown();}},
+    {Key::LowercaseK, "Scroll Up", [this]() {scroll_up();}, false},
+    {Key::LowercaseJ, "Scroll Down", [this]() {scroll_down();}, false},
+    {Key::Up, "Scroll Up", [this]() {scroll_up();}, false},
+    {Key::Down, "Scroll Down", [this]() {scroll_down();}, false}};
 
   keyBindingMap_.clear();
   for (const auto & entry : keyBindings_) {
@@ -357,12 +351,12 @@ void LogViewer::init_key_bindings()
   }
 }
 
-void ros2_console_tui_node::LogViewer::handle_sigwinch(int)
-{
-  resize_requested_.store(true, std::memory_order_relaxed);
-}
+// static void LogViewerTui::handle_sigwinch(int)
+// {
+//   resize_requested_.store(true, std::memory_order_relaxed);
+// }
 
-void LogViewer::on_resize()
+void LogViewerTui::on_resize()
 {
   endwin();
   refresh();
@@ -379,9 +373,9 @@ int main(int argc, char ** argv)
   rclcpp::init(argc, argv);
   rclcpp::NodeOptions options;
 
-  auto node = std::make_shared<ros2_console_tui_node::LogViewer>(options);
+  auto node = std::make_shared<ros2_console_tui_node::LogViewerTui>(options);
 
-  std::thread spin_thread([&]() { rclcpp::spin(node); });
+  std::thread spin_thread([&]() {rclcpp::spin(node);});
 
   try {
     node->spin();

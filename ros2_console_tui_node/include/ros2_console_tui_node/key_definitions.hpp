@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __ROS2_CONSOLE_TUI_NODE_KEY_DEFINITIONS_HPP__
-#define __ROS2_CONSOLE_TUI_NODE_KEY_DEFINITIONS_HPP__
+#ifndef ROS2_CONSOLE_TUI_NODE__KEY_DEFINITIONS_HPP_
+#define ROS2_CONSOLE_TUI_NODE__KEY_DEFINITIONS_HPP_
 
 #include <ncurses.h>
 
@@ -23,7 +23,8 @@
 namespace ros2_console_tui_node
 {
 
-enum class Key {
+enum class Key
+{
   // Lowercase letters
   LowercaseA,
   LowercaseB,
@@ -354,4 +355,4 @@ struct KeyBindingEntry
 
 }  // namespace ros2_console_tui_node
 
-#endif  // __ROS2_CONSOLE_TUI_NODE_KEY_DEFINITIONS_HPP__
+#endif  // ROS2_CONSOLE_TUI_NODE__KEY_DEFINITIONS_HPP_

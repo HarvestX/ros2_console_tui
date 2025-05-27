@@ -12,52 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __ROS2_CONSOLE_TUI_NODE_LOG_VIEWER_HPP__
-#define __ROS2_CONSOLE_TUI_NODE_LOG_VIEWER_HPP__
+#ifndef ROS2_CONSOLE_TUI_NODE__LOG_VIEWER_HPP_
+#define ROS2_CONSOLE_TUI_NODE__LOG_VIEWER_HPP_
 
-#include <ncurses.h>
-#include <yaml-cpp/yaml.h>
+#include <unordered_map>
+#include <vector>
 
-#include <boost/circular_buffer.hpp>
-#include <filesystem>
-#include <mutex>
-#include <rcl_interfaces/msg/log.hpp>
-#include <rclcpp/rclcpp.hpp>
-#include <set>
-#include <string>
-#include <utility>
-
+#include "log_viewer_base/log_viewer_base.hpp"
 #include "ros2_console_tui_node/key_definitions.hpp"
-#include "ros2_console_tui_node/log_types.hpp"
 #include "ros2_console_tui_node/window_context.hpp"
 
 namespace ros2_console_tui_node
 {
 
-class LogViewer : public rclcpp::Node
+class LogViewerTui : public log_viewer_base::LogViewerBase
 {
 public:
-  explicit LogViewer(const rclcpp::NodeOptions options);
+  explicit LogViewerTui(const rclcpp::NodeOptions options);
   void spin();
 
 private:
-  const size_t BUFF_SIZE;
-  boost::circular_buffer<std::pair<LogLevel, std::string>> display_logs_;
-  boost::circular_buffer<std::pair<LogLevel, std::string>> pending_logs_;
-  std::set<std::string> excluded_names_;
-
-  std::mutex pending_logs_mutex_;
-
-  rclcpp::Subscription<rcl_interfaces::msg::Log>::SharedPtr sub_;
-
-  std::vector<std::pair<LogLevel, std::string>> filtered_logs_;
+  boost::circular_buffer<rcl_interfaces::msg::Log> display_logs_;
+  std::vector<rcl_interfaces::msg::Log> filtered_logs_;
   std::unordered_map<WindowType, WindowContext> windows_;
-  LogLevel filter_level_;
+  log_viewer_base::LogLevel filter_level_;
   std::vector<KeyBindingEntry> keyBindings_;
   std::unordered_map<int, KeyBindingEntry> keyBindingMap_;
   int scroll_offset_ = 0;
-
-  void log_callback(const rcl_interfaces::msg::Log::SharedPtr msg);
 
   void init_screen();
   void init_key_bindings();
@@ -69,10 +50,11 @@ private:
 
   void load_config();
 
-  bool should_display(LogLevel level);
-  void set_filter_level(LogLevel level);
+  bool should_display(log_viewer_base::LogLevel level);
+  void set_filter_level(log_viewer_base::LogLevel level);
 
   void clear_logs();
+  void pause_logs();
   void scroll_up();
   void scroll_down();
 
@@ -88,10 +70,12 @@ private:
   void update_log_buffers();
 
   static std::atomic<bool> resize_requested_;
-  static void handle_sigwinch(int);
+  static void handle_sigwinch(int) {
+    resize_requested_.store(true, std::memory_order_relaxed);
+  }
   void on_resize();
 };
 
 }  // namespace ros2_console_tui_node
 
-#endif  // __ROS2_CONSOLE_TUI_NODE_LOG_VIEWER_HPP__
+#endif  // ROS2_CONSOLE_TUI_NODE__LOG_VIEWER_HPP_

@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>ros2_console_tui_node</name>
+  <name>log_viewer_base</name>
   <version>0.0.0</version>
-  <description>log viewer</description>
+  <description>log_viewer_base pkg</description>
   <maintainer email="yuki8mamo10.hu@gmail.com">Yuki Yamamoto</maintainer>
   <maintainer email="ray255ar@gmail.com">Ar-Ray-code</maintainer>
   <license>Apache License 2.0</license>
@@ -11,7 +11,6 @@
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
 
   <depend>rclcpp</depend>
-  <depend>log_viewer_base</depend>
   <depend>rcl_interfaces</depend>
   <depend>ncurses</depend>
   <depend>boost</depend>

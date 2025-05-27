@@ -12,19 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __ROS2_CONSOLE_TUI_NODE_LOG_TYPES_HPP__
-#define __ROS2_CONSOLE_TUI_NODE_LOG_TYPES_HPP__
+#ifndef LOG_VIEWER_BASE__LOG_TYPES_HPP_
+#define LOG_VIEWER_BASE__LOG_TYPES_HPP_
 
 #include <cstdint>
 #include <string>
 #include <unordered_map>
 
-namespace ros2_console_tui_node
+namespace log_viewer_base
 {
 
 enum class LogLevel : uint8_t { ALL = 0, DEBUG = 10, INFO = 20, WARN = 30, ERROR = 40, FATAL = 50 };
 
-enum ColorPair {
+enum ColorPair
+{
   COLOR_DEBUG = 1,
   COLOR_INFO = 2,
   COLOR_WARN = 3,
@@ -33,12 +34,12 @@ enum ColorPair {
 };
 
 const std::unordered_map<LogLevel, int> kLogLevelToColor = {
-  {LogLevel::DEBUG, COLOR_DEBUG}, {LogLevel::INFO, COLOR_INFO},   {LogLevel::WARN, COLOR_WARN},
+  {LogLevel::DEBUG, COLOR_DEBUG}, {LogLevel::INFO, COLOR_INFO}, {LogLevel::WARN, COLOR_WARN},
   {LogLevel::ERROR, COLOR_ERROR}, {LogLevel::FATAL, COLOR_FATAL},
 };
 
 const std::unordered_map<LogLevel, std::string> kLogLevelToString = {
-  {LogLevel::ALL, "ALL"},   {LogLevel::DEBUG, "DEBUG"}, {LogLevel::INFO, "INFO"},
+  {LogLevel::ALL, "ALL"}, {LogLevel::DEBUG, "DEBUG"}, {LogLevel::INFO, "INFO"},
   {LogLevel::WARN, "WARN"}, {LogLevel::ERROR, "ERROR"}, {LogLevel::FATAL, "FATAL"}};
 
 inline std::string level_to_string(LogLevel level)
@@ -53,6 +54,6 @@ inline int get_color_pair(LogLevel level)
   return (it != kLogLevelToColor.end()) ? it->second : COLOR_INFO;
 }
 
-}  // namespace ros2_console_tui_node
+}  // namespace log_viewer_base
 
-#endif  // __ROS2_CONSOLE_TUI_NODE_LOG_TYPES_HPP__
+#endif  // LOG_VIEWER_BASE__LOG_TYPES_HPP_

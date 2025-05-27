@@ -10,6 +10,7 @@ A terminal-based interactive log viewer for ROS 2 applications.
 - 🧩 Supports multiple log levels: `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL`.
 - 🎛 Text-based UI (TUI) powered by `ncurses`.
 - 🎨 Configurable filters via YAML file (`~/.ros2_console_tui/config.yaml`).
+- This is inspired by rqt_console https://github.com/ros-visualization/rqt_console
 
 ---
 
@@ -55,6 +56,7 @@ ros2 run ros2_console_tui log_viewer_exec_
 | `w`     | Show only `WARN` logs       |
 | `e`     | Show only `ERROR` logs      |
 | `f`     | Show only `FATAL` logs      |
+| `p`     | Pause updating logs      |
 | `c`     | Clear current log buffer    |
 | `↑ / ↓` | Scroll up/down through logs |
 | `q`     | Quit the viewer             |
