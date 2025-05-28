@@ -351,11 +351,6 @@ void LogViewerTui::init_key_bindings()
   }
 }
 
-// static void LogViewerTui::handle_sigwinch(int)
-// {
-//   resize_requested_.store(true, std::memory_order_relaxed);
-// }
-
 void LogViewerTui::on_resize()
 {
   endwin();
