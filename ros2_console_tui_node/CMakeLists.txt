@@ -14,8 +14,8 @@ find_package(yaml-cpp REQUIRED)
 
 # log_viewer ============================
 set(TARGET log_viewer)
-ament_auto_add_executable(${TARGET}_exec_ src/${TARGET}.cpp)
-target_link_libraries(${TARGET}_exec_ ${CURSES_LIBRARIES} yaml-cpp)
+ament_auto_add_executable(${TARGET} src/${TARGET}.cpp)
+target_link_libraries(${TARGET} ${CURSES_LIBRARIES} yaml-cpp)
 unset(TARGET)
 
 if(BUILD_TESTING)

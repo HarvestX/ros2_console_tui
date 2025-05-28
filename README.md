@@ -21,7 +21,7 @@ A terminal-based interactive log viewer for ROS 2 applications.
 ```bash
 mkdir -p ~/ws_tui/src
 cd ~/ws_tui/src
-git clone https://github.com/yourusername/ros2_console_tui.git
+git clone https://github.com/HarvestX/ros2_console_tui.git
 ```
 
 ### 2. Build the workspace
@@ -39,7 +39,7 @@ source install/setup.bash
 Run the TUI log viewer with:
 
 ```bash
-ros2 run ros2_console_tui log_viewer_exec_
+ros2 run ros2_console_tui_node log_viewer
 ```
 
 > **Note:** Make sure your ROS 2 system is running and publishing logs to `/rosout`.
