@@ -22,7 +22,7 @@
 namespace ros2_console_tui_node
 {
 
-enum class WindowType { Log, Footer, Header, Frame };
+enum class WindowType { Log, Footer, Header, Frame, Node };
 
 struct WindowContext
 {

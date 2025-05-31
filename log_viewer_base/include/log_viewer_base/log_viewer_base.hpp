@@ -28,6 +28,7 @@
 #include <utility>
 
 #include "log_viewer_base/log_types.hpp"
+#include "log_viewer_base/graph_inspector.hpp"
 
 namespace log_viewer_base
 {
@@ -54,6 +55,12 @@ public:
   {
     return pending_logs_;
   }
+  
+  // Graph inspector functions
+  void update_graph();
+  std::vector<GraphInspector::NodeInfo> get_nodes() const;
+  std::map<std::string, std::vector<std::string>> get_topics() const;
+  std::map<std::string, std::vector<std::string>> get_services() const;
 
 public:
   const size_t BUFF_SIZE;
@@ -65,6 +72,9 @@ private:
   rclcpp::Subscription<rcl_interfaces::msg::Log>::SharedPtr sub_;
   boost::circular_buffer<rcl_interfaces::msg::Log> pending_logs_;
   bool now_pause_ = false;
+  
+  // Graph inspector for node information
+  std::unique_ptr<GraphInspector> graph_inspector_;
 };
 
 }  // namespace log_viewer_base

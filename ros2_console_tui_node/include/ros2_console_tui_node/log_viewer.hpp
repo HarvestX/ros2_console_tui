@@ -32,6 +32,10 @@ public:
   void spin();
 
 private:
+  // Display mode enum
+  enum class DisplayMode { Log, Node };
+  DisplayMode current_display_mode_ = DisplayMode::Log;
+
   boost::circular_buffer<rcl_interfaces::msg::Log> display_logs_;
   std::vector<rcl_interfaces::msg::Log> filtered_logs_;
   std::unordered_map<WindowType, WindowContext> windows_;
@@ -39,6 +43,9 @@ private:
   std::vector<KeyBindingEntry> keyBindings_;
   std::unordered_map<int, KeyBindingEntry> keyBindingMap_;
   int scroll_offset_ = 0;
+  int node_scroll_offset_ = 0;
+  std::chrono::steady_clock::time_point last_graph_update_;
+  std::chrono::seconds graph_update_interval_{5};
 
   void init_screen();
   void init_key_bindings();
@@ -57,17 +64,21 @@ private:
   void pause_logs();
   void scroll_up();
   void scroll_down();
+  void switch_to_log_mode();
+  void switch_to_node_mode();
 
   void handle_key(int ch);
   bool handle_status_bar_key(int ch);
   bool handle_scroll_key(int ch);
 
   void draw_log_window();
+  void draw_node_window();
   void draw_header();
   void draw_footer();
   void draw_frame();
 
   void update_log_buffers();
+  void update_node_info();
 
   static std::atomic<bool> resize_requested_;
   static void handle_sigwinch(int) {

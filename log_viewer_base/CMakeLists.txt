@@ -16,6 +16,7 @@ find_package(yaml-cpp REQUIRED)
 set(TARGET log_viewer_base)
 ament_auto_add_library(${TARGET} SHARED
   src/${TARGET}.cpp
+  src/graph_inspector.cpp
 )
 target_link_libraries(${TARGET} ${CURSES_LIBRARIES} yaml-cpp)
 

@@ -26,6 +26,11 @@ LogViewerBase::LogViewerBase(const rclcpp::NodeOptions & options)
   qos.reliable();
   sub_ = this->create_subscription<rcl_interfaces::msg::Log>(
     "/rosout", qos, std::bind(&LogViewerBase::log_callback, this, std::placeholders::_1));
+  
+  // Initialize graph inspector with this node and default update interval of 5 seconds
+  graph_inspector_ = std::make_unique<GraphInspector>(
+    std::shared_ptr<rclcpp::Node>(this, [](auto){}),
+    std::chrono::seconds(5));
 }
 
 void LogViewerBase::log_callback(const rcl_interfaces::msg::Log::SharedPtr msg)
@@ -62,6 +67,37 @@ bool LogViewerBase::is_paused() const
 void LogViewerBase::set_paused_flag(bool paused)
 {
   now_pause_ = paused;
+}
+
+void LogViewerBase::update_graph()
+{
+  if (graph_inspector_) {
+    graph_inspector_->update();
+  }
+}
+
+std::vector<GraphInspector::NodeInfo> LogViewerBase::get_nodes() const
+{
+  if (graph_inspector_) {
+    return graph_inspector_->get_nodes();
+  }
+  return {};
+}
+
+std::map<std::string, std::vector<std::string>> LogViewerBase::get_topics() const
+{
+  if (graph_inspector_) {
+    return graph_inspector_->get_topics();
+  }
+  return {};
+}
+
+std::map<std::string, std::vector<std::string>> LogViewerBase::get_services() const
+{
+  if (graph_inspector_) {
+    return graph_inspector_->get_services();
+  }
+  return {};
 }
 
 }  // namespace log_viewer_base
