@@ -33,8 +33,13 @@ public:
 
 private:
   // Display mode enum
-  enum class DisplayMode { Log, Node };
+  enum class DisplayMode { Log, Node, NodeSelect };
   DisplayMode current_display_mode_ = DisplayMode::Log;
+
+  // Node selection state
+  int selected_node_idx_ = 0;
+  std::vector<bool> selected_nodes_;
+  bool node_filter_active_ = false;
 
   boost::circular_buffer<rcl_interfaces::msg::Log> display_logs_;
   std::vector<rcl_interfaces::msg::Log> filtered_logs_;
@@ -66,6 +71,11 @@ private:
   void scroll_down();
   void switch_to_log_mode();
   void switch_to_node_mode();
+  void switch_to_node_select_mode();
+  void apply_node_filter();
+  void select_next_node();
+  void select_prev_node();
+  void toggle_selected_node();
 
   void handle_key(int ch);
   bool handle_status_bar_key(int ch);
@@ -73,6 +83,7 @@ private:
 
   void draw_log_window();
   void draw_node_window();
+  void draw_node_select_window();
   void draw_header();
   void draw_footer();
   void draw_frame();

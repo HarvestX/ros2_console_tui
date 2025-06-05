@@ -56,6 +56,20 @@ public:
     return pending_logs_;
   }
   
+  // New functions for filtering logs by node names and namespaces
+  boost::circular_buffer<rcl_interfaces::msg::Log> get_filtered_logs(
+    const std::vector<std::string>& node_names,
+    const std::vector<std::string>& namespace_names);
+  
+  std::vector<std::string> get_node_names() const;
+  std::vector<std::string> get_namespace_names() const;
+  
+  void set_filtered_node_names(const std::vector<std::string>& node_names);
+  void set_filtered_namespace_names(const std::vector<std::string>& namespace_names);
+  
+  const std::vector<std::string>& get_filtered_node_names() const { return filtered_node_names_; }
+  const std::vector<std::string>& get_filtered_namespace_names() const { return filtered_namespace_names_; }
+  
   // Graph inspector functions
   void update_graph();
   std::vector<GraphInspector::NodeInfo> get_nodes() const;
@@ -72,6 +86,10 @@ private:
   rclcpp::Subscription<rcl_interfaces::msg::Log>::SharedPtr sub_;
   boost::circular_buffer<rcl_interfaces::msg::Log> pending_logs_;
   bool now_pause_ = false;
+  
+  // Node and namespace filtering
+  std::vector<std::string> filtered_node_names_;
+  std::vector<std::string> filtered_namespace_names_;
   
   // Graph inspector for node information
   std::unique_ptr<GraphInspector> graph_inspector_;
