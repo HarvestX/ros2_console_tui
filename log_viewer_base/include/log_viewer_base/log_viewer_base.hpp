@@ -56,10 +56,8 @@ public:
     return pending_logs_;
   }
   
-  // New functions for filtering logs by node names and namespaces
   boost::circular_buffer<rcl_interfaces::msg::Log> get_filtered_logs(
-    const std::vector<std::string>& node_names,
-    const std::vector<std::string>& namespace_names);
+    const std::vector<std::string>& node_names);
   
   std::vector<std::string> get_node_names() const;
   std::vector<std::string> get_namespace_names() const;

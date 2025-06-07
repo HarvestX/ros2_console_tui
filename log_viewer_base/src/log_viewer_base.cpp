@@ -100,4 +100,18 @@ std::map<std::string, std::vector<std::string>> LogViewerBase::get_services() co
   return {};
 }
 
+boost::circular_buffer<rcl_interfaces::msg::Log> LogViewerBase::get_filtered_logs(
+  const std::vector<std::string>& node_names)
+{
+  boost::circular_buffer<rcl_interfaces::msg::Log> filtered_logs(BUFF_SIZE);
+  std::lock_guard<std::mutex> lock(pending_logs_mutex_);
+  
+  for (const auto & log : pending_logs_) {
+    if (std::find(node_names.begin(), node_names.end(), log.name) != node_names.end()) {
+      filtered_logs.push_back(log);
+    }
+  }
+  return filtered_logs;
+}
+
 }  // namespace log_viewer_base
