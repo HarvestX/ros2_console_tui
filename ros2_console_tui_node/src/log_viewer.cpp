@@ -72,10 +72,10 @@ void LogViewerTui::spin()
     int ch = getch();
     if (ch != ERR) {handle_key(ch);}
 
-    // Update the appropriate buffers based on current mode
     if (current_display_mode_ == DisplayMode::Log) {
       update_log_buffers();
-    } else if (current_display_mode_ == DisplayMode::Node) {
+    } else if (current_display_mode_ == DisplayMode::Node || 
+               current_display_mode_ == DisplayMode::NodeSelect) {
       update_node_info();
     }
     
@@ -83,11 +83,12 @@ void LogViewerTui::spin()
     draw_footer();
     draw_frame();
     
-    // Draw the appropriate window based on current mode
     if (current_display_mode_ == DisplayMode::Log) {
       draw_log_window();
     } else if (current_display_mode_ == DisplayMode::Node) {
       draw_node_window();
+    } else if (current_display_mode_ == DisplayMode::NodeSelect) {
+      draw_node_select_window();
     }
     
     refresh_windows();
@@ -212,24 +213,36 @@ void LogViewerTui::draw_header()
   std::string title;
   if (current_display_mode_ == DisplayMode::Log) {
     title = "ROS 2 Console TUI - Log Viewer";
-  } else {
+  } else if (current_display_mode_ == DisplayMode::Node) {
     title = "ROS 2 Console TUI - Node Graph Viewer";
+  } else if (current_display_mode_ == DisplayMode::NodeSelect) {
+    title = "ROS 2 Console TUI - Node Selection";
   }
 
-  // Display mode-specific information
   if (current_display_mode_ == DisplayMode::Log) {
     size_t total_logs = 0;
     for (const auto & entry : display_logs_) {
-      if (should_display(static_cast<log_viewer_base::LogLevel>(entry.level))) {
+      if (should_display(static_cast<log_viewer_base::LogLevel>(entry.level)) &&
+          (!node_filter_active_ || should_display_from_node(entry.name))) {
         ++total_logs;
       }
     }
 
-    std::string pause_label = "Pause | ";
-    std::string filter_label = "Filter: ";
+    std::string pause_label = "";
     if (is_paused()) {
-      filter_label = pause_label + filter_label;
+      pause_label = "Pause | ";
     }
+    
+    std::string node_filter_label = "";
+    if (node_filter_active_) {
+      int selected_count = 0;
+      for (const auto& selected : selected_nodes_) {
+        if (selected) selected_count++;
+      }
+      node_filter_label = "Node Filter (" + std::to_string(selected_count) + ") | ";
+    }
+    
+    std::string filter_label = pause_label + node_filter_label + "Filter: ";
     std::string filter_name = level_to_string(filter_level_);
     std::ostringstream scroll_stream;
     scroll_stream << " | Scroll: " << scroll_offset_ << "/" << total_logs;
@@ -239,20 +252,18 @@ void LogViewerTui::draw_header()
       ctx.width - static_cast<int>(filter_label.size() + filter_name.size() + scroll_info.size()) - 1;
     if (state_x > static_cast<int>(title.size()) + 2) {
       mvwprintw(win, 0, state_x, "%s", filter_label.c_str());
-
+      
       int color_pair = log_viewer_base::get_color_pair(filter_level_);
       wattron(win, COLOR_PAIR(color_pair));
       wprintw(win, "%s", filter_name.c_str());
       wattroff(win, COLOR_PAIR(color_pair));
-
       wprintw(win, "%s", scroll_info.c_str());
     }
   } else {
-    // Node graph view info
     auto now = std::chrono::system_clock::now();
     auto now_time_t = std::chrono::system_clock::to_time_t(now);
     std::string time_str = std::ctime(&now_time_t);
-    time_str.pop_back();  // Remove trailing newline
+    time_str.pop_back();
     
     std::ostringstream info_stream;
     info_stream << "Last updated: " << time_str;
@@ -279,25 +290,28 @@ void LogViewerTui::draw_footer()
 
   int x = 0;
 
-  // Always show mode switching keys first
-  std::vector<std::string> mode_keys = {"[l] Log View", "[n] Node View"};
+  std::vector<std::string> mode_keys;
+  if (current_display_mode_ == DisplayMode::NodeSelect) {
+    mode_keys = {"[l] Apply & Return", "[n] Node Graph View", "[↑↓] Navigate", "[Enter] Toggle"};
+  } else {
+    mode_keys = {"[l] Log View", "[n] Node Selection"};
+  }
+  
   for (const auto& key : mode_keys) {
     mvwprintw(win, 0, x, "%s", key.c_str());
     x += key.size() + 1;
   }
   
-  // Add a separator
   mvwprintw(win, 0, x, "|");
   x += 2;
 
-  // Show mode-specific keys
   for (const auto & entry : keyBindings_) {
-    // Skip mode switching keys as we already displayed them
-    if (entry.label == "[l] Log View" || entry.label == "[n] Node View") {
+    if (entry.label == "[l] Log View" || entry.label == "[n] Node View" ||
+        entry.label == "Scroll Up" || entry.label == "Scroll Down" ||
+        entry.label == "Toggle Selection") {
       continue;
     }
     
-    // For log mode, show filter keys
     if (current_display_mode_ == DisplayMode::Log) {
       if (!entry.showInStatusBar || entry.label.empty()) {continue;}
       if (entry.label.find("[a]") == 0 || entry.label.find("[d]") == 0 ||
@@ -308,9 +322,13 @@ void LogViewerTui::draw_footer()
         mvwprintw(win, 0, x, "%s", entry.label.c_str());
         x += entry.label.size() + 1;
       }
-    } 
-    // For node mode, show only common keys
-    else {
+    } else if (current_display_mode_ == DisplayMode::NodeSelect) {
+      if (!entry.showInStatusBar || entry.label.empty()) {continue;}
+      if (entry.label.find("[q]") == 0) {
+        mvwprintw(win, 0, x, "%s", entry.label.c_str());
+        x += entry.label.size() + 1;
+      }
+    } else {
       if (!entry.showInStatusBar || entry.label.empty()) {continue;}
       if (entry.label.find("[p]") == 0 || entry.label.find("[q]") == 0) {
         mvwprintw(win, 0, x, "%s", entry.label.c_str());
@@ -337,7 +355,8 @@ void LogViewerTui::update_log_buffers()
 
   filtered_logs_.clear();
   for (const auto & entry : display_logs_) {
-    if (should_display(static_cast<log_viewer_base::LogLevel>(entry.level))) {
+    if (should_display(static_cast<log_viewer_base::LogLevel>(entry.level)) && 
+        (!node_filter_active_ || should_display_from_node(entry.name))) {
       filtered_logs_.push_back(entry);
     }
   }
@@ -396,7 +415,6 @@ void LogViewerTui::scroll_up()
       windows_.at(WindowType::Log).needs_redraw = true;
     }
   } else if (current_display_mode_ == DisplayMode::Node) {
-    // For node view, we'll determine max offset in the draw function
     node_scroll_offset_++;
     windows_.at(WindowType::Header).needs_redraw = true;
     windows_.at(WindowType::Log).needs_redraw = true;
@@ -431,28 +449,61 @@ void LogViewerTui::handle_key(int ch)
 void LogViewerTui::init_key_bindings()
 {
   keyBindings_ = {
-    // Log view filters
     {Key::LowercaseA, "[a] All", [this]() {set_filter_level(log_viewer_base::LogLevel::ALL);}},
     {Key::LowercaseD, "[d] Debug", [this]() {set_filter_level(log_viewer_base::LogLevel::DEBUG);}},
     {Key::LowercaseI, "[i] Info", [this]() {set_filter_level(log_viewer_base::LogLevel::INFO);}},
     {Key::LowercaseW, "[w] Warn", [this]() {set_filter_level(log_viewer_base::LogLevel::WARN);}},
     {Key::LowercaseE, "[e] Error", [this]() {set_filter_level(log_viewer_base::LogLevel::ERROR);}},
     {Key::LowercaseF, "[f] Fatal", [this]() {set_filter_level(log_viewer_base::LogLevel::FATAL);}},
-    
-    // Mode switching
-    {Key::LowercaseL, "[l] Log View", [this]() {switch_to_log_mode();}},
-    {Key::LowercaseN, "[n] Node View", [this]() {switch_to_node_mode();}},
-    
-    // Common controls
+    {Key::LowercaseL, "[l] Log View", [this]() {
+      if (current_display_mode_ == DisplayMode::NodeSelect) {
+        apply_node_filter();
+      }
+      switch_to_log_mode();
+    }},
+    {Key::LowercaseN, "[n] Node View", [this]() {
+      if (current_display_mode_ == DisplayMode::Log || current_display_mode_ == DisplayMode::Node) {
+        switch_to_node_select_mode();
+      } else {
+        switch_to_node_mode();
+      }
+    }},
     {Key::LowercaseP, "[p] Pause", [this]() {pause_logs();}},
     {Key::LowercaseC, "[c] Clear", [this]() {clear_logs();}},
     {Key::LowercaseQ, "[q] Quit", [this]() {rclcpp::shutdown();}},
-    
-    // Scrolling controls
-    {Key::LowercaseK, "Scroll Up", [this]() {scroll_up();}, false},
-    {Key::LowercaseJ, "Scroll Down", [this]() {scroll_down();}, false},
-    {Key::Up, "Scroll Up", [this]() {scroll_up();}, false},
-    {Key::Down, "Scroll Down", [this]() {scroll_down();}, false}};
+    {Key::Enter, "Toggle Selection", [this]() {
+      if (current_display_mode_ == DisplayMode::NodeSelect) {
+        toggle_selected_node();
+      }
+    }, false},
+    {Key::LowercaseK, "Scroll Up", [this]() {
+      if (current_display_mode_ == DisplayMode::NodeSelect) {
+        select_prev_node();
+      } else {
+        scroll_up();
+      }
+    }, false},
+    {Key::LowercaseJ, "Scroll Down", [this]() {
+      if (current_display_mode_ == DisplayMode::NodeSelect) {
+        select_next_node();
+      } else {
+        scroll_down();
+      }
+    }, false},
+    {Key::Up, "Scroll Up", [this]() {
+      if (current_display_mode_ == DisplayMode::NodeSelect) {
+        select_prev_node();
+      } else {
+        scroll_up();
+      }
+    }, false},
+    {Key::Down, "Scroll Down", [this]() {
+      if (current_display_mode_ == DisplayMode::NodeSelect) {
+        select_next_node();
+      } else {
+        scroll_down();
+      }
+    }, false}};
 
   keyBindingMap_.clear();
   for (const auto & entry : keyBindings_) {

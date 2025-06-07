@@ -73,6 +73,7 @@ private:
   void switch_to_node_mode();
   void switch_to_node_select_mode();
   void apply_node_filter();
+  bool should_display_from_node(const std::string& node_name);
   void select_next_node();
   void select_prev_node();
   void toggle_selected_node();
