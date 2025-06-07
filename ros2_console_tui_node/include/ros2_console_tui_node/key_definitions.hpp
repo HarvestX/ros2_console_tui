@@ -134,7 +134,7 @@ enum class Key
 
 #define CTRL(x) ((x) & 0x1F)
 
-int to_keycode(Key key)
+inline int to_keycode(Key key)
 {
   using K = Key;
   switch (key) {

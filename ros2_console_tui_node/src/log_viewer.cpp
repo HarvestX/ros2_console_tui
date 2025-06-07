@@ -21,7 +21,8 @@ std::atomic<bool> LogViewerTui::resize_requested_{false};
 
 LogViewerTui::LogViewerTui(const rclcpp::NodeOptions options)
 : LogViewerBase(options),
-  display_logs_(BUFF_SIZE)
+  display_logs_(BUFF_SIZE),
+  last_graph_update_(std::chrono::steady_clock::now())
 {
   filtered_logs_.reserve(BUFF_SIZE);
   load_config();
@@ -71,11 +72,24 @@ void LogViewerTui::spin()
     int ch = getch();
     if (ch != ERR) {handle_key(ch);}
 
-    update_log_buffers();
+    // Update the appropriate buffers based on current mode
+    if (current_display_mode_ == DisplayMode::Log) {
+      update_log_buffers();
+    } else if (current_display_mode_ == DisplayMode::Node) {
+      update_node_info();
+    }
+    
     draw_header();
     draw_footer();
     draw_frame();
-    draw_log_window();
+    
+    // Draw the appropriate window based on current mode
+    if (current_display_mode_ == DisplayMode::Log) {
+      draw_log_window();
+    } else if (current_display_mode_ == DisplayMode::Node) {
+      draw_node_window();
+    }
+    
     refresh_windows();
   }
 
@@ -195,40 +209,64 @@ void LogViewerTui::draw_header()
   werase(win);
   wattron(win, A_BOLD);
 
-  const std::string title = "ROS 2 Console TUI - Log Viewer";
+  std::string title;
+  if (current_display_mode_ == DisplayMode::Log) {
+    title = "ROS 2 Console TUI - Log Viewer";
+  } else {
+    title = "ROS 2 Console TUI - Node Graph Viewer";
+  }
 
-  size_t total_logs = 0;
-  for (const auto & entry : display_logs_) {
-    if (should_display(static_cast<log_viewer_base::LogLevel>(entry.level))) {
-      ++total_logs;
+  // Display mode-specific information
+  if (current_display_mode_ == DisplayMode::Log) {
+    size_t total_logs = 0;
+    for (const auto & entry : display_logs_) {
+      if (should_display(static_cast<log_viewer_base::LogLevel>(entry.level))) {
+        ++total_logs;
+      }
+    }
+
+    std::string pause_label = "Pause | ";
+    std::string filter_label = "Filter: ";
+    if (is_paused()) {
+      filter_label = pause_label + filter_label;
+    }
+    std::string filter_name = level_to_string(filter_level_);
+    std::ostringstream scroll_stream;
+    scroll_stream << " | Scroll: " << scroll_offset_ << "/" << total_logs;
+    std::string scroll_info = scroll_stream.str();
+
+    int state_x =
+      ctx.width - static_cast<int>(filter_label.size() + filter_name.size() + scroll_info.size()) - 1;
+    if (state_x > static_cast<int>(title.size()) + 2) {
+      mvwprintw(win, 0, state_x, "%s", filter_label.c_str());
+
+      int color_pair = log_viewer_base::get_color_pair(filter_level_);
+      wattron(win, COLOR_PAIR(color_pair));
+      wprintw(win, "%s", filter_name.c_str());
+      wattroff(win, COLOR_PAIR(color_pair));
+
+      wprintw(win, "%s", scroll_info.c_str());
+    }
+  } else {
+    // Node graph view info
+    auto now = std::chrono::system_clock::now();
+    auto now_time_t = std::chrono::system_clock::to_time_t(now);
+    std::string time_str = std::ctime(&now_time_t);
+    time_str.pop_back();  // Remove trailing newline
+    
+    std::ostringstream info_stream;
+    info_stream << "Last updated: " << time_str;
+    info_stream << " | Next update: " << graph_update_interval_.count() << "s";
+    
+    std::string info = info_stream.str();
+    
+    int state_x = ctx.width - static_cast<int>(info.size()) - 1;
+    if (state_x > static_cast<int>(title.size()) + 2) {
+      mvwprintw(win, 0, state_x, "%s", info.c_str());
     }
   }
 
-  std::string pause_label = "Pause | ";
-  std::string filter_label = "Filter: ";
-  if (is_paused()) {
-    filter_label = pause_label + filter_label;
-  }
-  std::string filter_name = level_to_string(filter_level_);
-  std::ostringstream scroll_stream;
-  scroll_stream << " | Scroll: " << scroll_offset_ << "/" << total_logs;
-  std::string scroll_info = scroll_stream.str();
-
-  int state_x =
-    ctx.width - static_cast<int>(filter_label.size() + filter_name.size() + scroll_info.size()) - 1;
-  if (state_x > static_cast<int>(title.size()) + 2) {
-    mvwprintw(win, 0, state_x, "%s", filter_label.c_str());
-
-    int color_pair = log_viewer_base::get_color_pair(filter_level_);
-    wattron(win, COLOR_PAIR(color_pair));
-    wprintw(win, "%s", filter_name.c_str());
-    wattroff(win, COLOR_PAIR(color_pair));
-
-    wprintw(win, "%s", scroll_info.c_str());
-  }
-
   mvwprintw(win, 0, 0, "%s", title.c_str());
-
   wattroff(win, A_BOLD);
 }
 
@@ -241,10 +279,44 @@ void LogViewerTui::draw_footer()
 
   int x = 0;
 
+  // Always show mode switching keys first
+  std::vector<std::string> mode_keys = {"[l] Log View", "[n] Node View"};
+  for (const auto& key : mode_keys) {
+    mvwprintw(win, 0, x, "%s", key.c_str());
+    x += key.size() + 1;
+  }
+  
+  // Add a separator
+  mvwprintw(win, 0, x, "|");
+  x += 2;
+
+  // Show mode-specific keys
   for (const auto & entry : keyBindings_) {
-    if (!entry.showInStatusBar || entry.label.empty()) {continue;}
-    mvwprintw(win, 0, x, "%s", entry.label.c_str());
-    x += entry.label.size() + 1;
+    // Skip mode switching keys as we already displayed them
+    if (entry.label == "[l] Log View" || entry.label == "[n] Node View") {
+      continue;
+    }
+    
+    // For log mode, show filter keys
+    if (current_display_mode_ == DisplayMode::Log) {
+      if (!entry.showInStatusBar || entry.label.empty()) {continue;}
+      if (entry.label.find("[a]") == 0 || entry.label.find("[d]") == 0 ||
+          entry.label.find("[i]") == 0 || entry.label.find("[w]") == 0 ||
+          entry.label.find("[e]") == 0 || entry.label.find("[f]") == 0 ||
+          entry.label.find("[p]") == 0 || entry.label.find("[c]") == 0 ||
+          entry.label.find("[q]") == 0) {
+        mvwprintw(win, 0, x, "%s", entry.label.c_str());
+        x += entry.label.size() + 1;
+      }
+    } 
+    // For node mode, show only common keys
+    else {
+      if (!entry.showInStatusBar || entry.label.empty()) {continue;}
+      if (entry.label.find("[p]") == 0 || entry.label.find("[q]") == 0) {
+        mvwprintw(win, 0, x, "%s", entry.label.c_str());
+        x += entry.label.size() + 1;
+      }
+    }
   }
 
   wattroff(win, A_BOLD);
@@ -268,6 +340,19 @@ void LogViewerTui::update_log_buffers()
     if (should_display(static_cast<log_viewer_base::LogLevel>(entry.level))) {
       filtered_logs_.push_back(entry);
     }
+  }
+}
+
+void LogViewerTui::update_node_info()
+{
+  auto now = std::chrono::steady_clock::now();
+  auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_graph_update_);
+  
+  if (elapsed >= graph_update_interval_) {
+    update_graph();
+    last_graph_update_ = now;
+    windows_.at(WindowType::Header).needs_redraw = true;
+    windows_.at(WindowType::Log).needs_redraw = true;
   }
 }
 
@@ -303,9 +388,16 @@ void LogViewerTui::pause_logs()
 
 void LogViewerTui::scroll_up()
 {
-  const int max_offset = static_cast<int>(display_logs_.size());
-  if (scroll_offset_ < max_offset) {
-    scroll_offset_++;
+  if (current_display_mode_ == DisplayMode::Log) {
+    const int max_offset = static_cast<int>(display_logs_.size());
+    if (scroll_offset_ < max_offset) {
+      scroll_offset_++;
+      windows_.at(WindowType::Header).needs_redraw = true;
+      windows_.at(WindowType::Log).needs_redraw = true;
+    }
+  } else if (current_display_mode_ == DisplayMode::Node) {
+    // For node view, we'll determine max offset in the draw function
+    node_scroll_offset_++;
     windows_.at(WindowType::Header).needs_redraw = true;
     windows_.at(WindowType::Log).needs_redraw = true;
   }
@@ -313,10 +405,18 @@ void LogViewerTui::scroll_up()
 
 void LogViewerTui::scroll_down()
 {
-  if (scroll_offset_ > 0) {
-    scroll_offset_--;
-    windows_.at(WindowType::Header).needs_redraw = true;
-    windows_.at(WindowType::Log).needs_redraw = true;
+  if (current_display_mode_ == DisplayMode::Log) {
+    if (scroll_offset_ > 0) {
+      scroll_offset_--;
+      windows_.at(WindowType::Header).needs_redraw = true;
+      windows_.at(WindowType::Log).needs_redraw = true;
+    }
+  } else if (current_display_mode_ == DisplayMode::Node) {
+    if (node_scroll_offset_ > 0) {
+      node_scroll_offset_--;
+      windows_.at(WindowType::Header).needs_redraw = true;
+      windows_.at(WindowType::Log).needs_redraw = true;
+    }
   }
 }
 
@@ -331,15 +431,24 @@ void LogViewerTui::handle_key(int ch)
 void LogViewerTui::init_key_bindings()
 {
   keyBindings_ = {
+    // Log view filters
     {Key::LowercaseA, "[a] All", [this]() {set_filter_level(log_viewer_base::LogLevel::ALL);}},
     {Key::LowercaseD, "[d] Debug", [this]() {set_filter_level(log_viewer_base::LogLevel::DEBUG);}},
     {Key::LowercaseI, "[i] Info", [this]() {set_filter_level(log_viewer_base::LogLevel::INFO);}},
     {Key::LowercaseW, "[w] Warn", [this]() {set_filter_level(log_viewer_base::LogLevel::WARN);}},
     {Key::LowercaseE, "[e] Error", [this]() {set_filter_level(log_viewer_base::LogLevel::ERROR);}},
     {Key::LowercaseF, "[f] Fatal", [this]() {set_filter_level(log_viewer_base::LogLevel::FATAL);}},
+    
+    // Mode switching
+    {Key::LowercaseL, "[l] Log View", [this]() {switch_to_log_mode();}},
+    {Key::LowercaseN, "[n] Node View", [this]() {switch_to_node_mode();}},
+    
+    // Common controls
     {Key::LowercaseP, "[p] Pause", [this]() {pause_logs();}},
     {Key::LowercaseC, "[c] Clear", [this]() {clear_logs();}},
     {Key::LowercaseQ, "[q] Quit", [this]() {rclcpp::shutdown();}},
+    
+    // Scrolling controls
     {Key::LowercaseK, "Scroll Up", [this]() {scroll_up();}, false},
     {Key::LowercaseJ, "Scroll Down", [this]() {scroll_down();}, false},
     {Key::Up, "Scroll Up", [this]() {scroll_up();}, false},
