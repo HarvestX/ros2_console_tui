@@ -20,6 +20,12 @@ ament_auto_add_library(${TARGET} SHARED
 )
 target_link_libraries(${TARGET} ${CURSES_LIBRARIES} yaml-cpp)
 
+set(EXAMPLE_TARGET log_viewer_stdout)
+ament_auto_add_executable(${EXAMPLE_TARGET}
+  example/log_viewer_stdout.cpp
+)
+target_link_libraries(${EXAMPLE_TARGET} ${TARGET})
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
