@@ -53,7 +53,8 @@ public:
   }
   boost::circular_buffer<rcl_interfaces::msg::Log> get_pending_logs()
   {
-    return pending_logs_;
+    std::lock_guard<std::mutex> lock(pending_logs_mutex_);
+    return boost::circular_buffer<rcl_interfaces::msg::Log>(pending_logs_);
   }
   
   boost::circular_buffer<rcl_interfaces::msg::Log> get_filtered_logs(
