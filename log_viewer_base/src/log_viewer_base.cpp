@@ -63,17 +63,12 @@ void LogViewerBase::log_callback(const rcl_interfaces::msg::Log::SharedPtr msg)
 
 std::string LogViewerBase::convert_to_string(const rcl_interfaces::msg::Log & msg)
 {
-  std::string msg_line = msg.msg;
-  if (msg_line.empty()) {
+  if (msg.msg.empty()) {
     return "";
   }
 
-  std::string time_str = std::to_string(msg.stamp.sec) + "." +
-    std::to_string(msg.stamp.nanosec);
-  std::string name_str = msg.name;
-  std::string level_str = level_to_string(static_cast<LogLevel>(msg.level));
-
-  return "[" + name_str + "] [" + level_str + "] " + msg_line;
+  return "[" + msg.name + "] [" + level_to_string(static_cast<LogLevel>(msg.level)) + "] " +
+         std::to_string(msg.stamp.sec) + "." + std::to_string(msg.stamp.nanosec);
 }
 
 bool LogViewerBase::is_paused() const
@@ -118,7 +113,7 @@ std::map<std::string, std::vector<std::string>> LogViewerBase::get_services() co
 }
 
 boost::circular_buffer<rcl_interfaces::msg::Log> LogViewerBase::get_filtered_logs(
-  const std::vector<std::string>& node_names)
+  const std::vector<std::string>& full_names)
 {
   boost::circular_buffer<rcl_interfaces::msg::Log> filtered_logs(BUFF_SIZE);
   boost::circular_buffer<rcl_interfaces::msg::Log> logs_copy;
@@ -126,36 +121,34 @@ boost::circular_buffer<rcl_interfaces::msg::Log> LogViewerBase::get_filtered_log
     std::lock_guard<std::mutex> lock(pending_logs_mutex_);
     logs_copy = boost::circular_buffer<rcl_interfaces::msg::Log>(pending_logs_);
   }
-  
+
+  if (graph_inspector_) {
+    graph_inspector_->update();
+  }
+
   for (const auto & log : logs_copy) {
     bool log_matches = false;
-    
-    if (node_names.empty()) {
+    std::string log_full_name = log.name;
+
+    if (log_full_name.empty()) {
+      continue;
+    }
+
+    std::replace(log_full_name.begin(), log_full_name.end(), '.', '/');
+
+    if (full_names.empty()) {
       log_matches = true;
     } else {
-      for (const auto& requested_node : node_names) {
-        if (requested_node.empty()) {
+      for (const auto& requested_full : full_names) {
+        if (requested_full.empty()) {
           continue;
         }
-        
-        if (log.name == requested_node) {
-          log_matches = true;
-          break;
-        }
-        
-        if (requested_node[0] == '/' && 
-            log.name == requested_node.substr(1)) {
-          log_matches = true;
-          break;
-        }
-        
-        if (log.name == '/' + requested_node) {
+        if (log_full_name == requested_full) {
           log_matches = true;
           break;
         }
       }
     }
-    
     if (log_matches) {
       filtered_logs.push_back(log);
     }

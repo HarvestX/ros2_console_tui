@@ -57,7 +57,7 @@ public:
   }
   
   boost::circular_buffer<rcl_interfaces::msg::Log> get_filtered_logs(
-    const std::vector<std::string>& node_names);
+    const std::vector<std::string>& full_names);
   
   std::vector<std::string> get_node_names() const;
   std::vector<std::string> get_namespace_names() const;

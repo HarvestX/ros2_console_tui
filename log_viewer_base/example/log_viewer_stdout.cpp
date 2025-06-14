@@ -67,9 +67,9 @@ public:
   {
     auto last_log_check = std::chrono::steady_clock::now();
     auto last_stats_print = std::chrono::steady_clock::now();
-    const auto stats_interval = std::chrono::seconds(10);
-    const auto log_check_interval = std::chrono::milliseconds(100);
-    const auto graph_update_interval = std::chrono::seconds(30);
+    const auto stats_interval = std::chrono::seconds(3);
+    const auto log_check_interval = std::chrono::milliseconds(1000);
+    const auto graph_update_interval = std::chrono::seconds(3);
 
     while (rclcpp::ok() && running_) {
       auto now = std::chrono::steady_clock::now();
@@ -136,19 +136,12 @@ private:
 
   void print_log_entry(const rcl_interfaces::msg::Log & log_entry)
   {
-    std::time_t t = static_cast<std::time_t>(log_entry.stamp.sec);
-    std::tm * tm_info = std::localtime(&t);
-    
-    std::string level_str = log_viewer_base::level_to_string(
-      static_cast<log_viewer_base::LogLevel>(log_entry.level));
-    
-    std::cout << "["
-              << std::put_time(tm_info, "%H:%M:%S")
-              << "." << std::setfill('0') << std::setw(3)
-              << (log_entry.stamp.nanosec / 1000000)
-              << "[" << std::setw(5) << level_str << "]"
-              << "\033[0m"
-              << " [" << log_entry.name << "] "
+    std::cout << "[" << std::setw(5)
+              << log_viewer_base::level_to_string(static_cast<log_viewer_base::LogLevel>(log_entry.level))
+              << "] ["
+              << log_entry.stamp.sec << "."
+              << log_entry.stamp.nanosec
+              << "] [" << log_entry.name << "]: "
               << log_entry.msg << std::endl;
   }
 
