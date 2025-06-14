@@ -24,10 +24,17 @@ LogViewerBase::LogViewerBase(const rclcpp::NodeOptions & options)
 {
   rclcpp::QoS qos(rclcpp::KeepLast(100));
   qos.reliable();
-  sub_ = this->create_subscription<rcl_interfaces::msg::Log>(
-    "/rosout", qos, std::bind(&LogViewerBase::log_callback, this, std::placeholders::_1));
+  qos.transient_local();
+  qos.lifespan(std::chrono::nanoseconds(10000000000));
   
-  // Initialize graph inspector with this node and default update interval of 5 seconds
+  std::cout << "LogViewerBase Node initialized with buffer size: " << BUFF_SIZE << std::endl;
+  
+  sub_ = this->create_subscription<rcl_interfaces::msg::Log>(
+    "/rosout", qos, 
+    [this](const rcl_interfaces::msg::Log::SharedPtr msg) {
+      this->log_callback(msg);
+    });
+  
   graph_inspector_ = std::make_unique<GraphInspector>(
     std::shared_ptr<rclcpp::Node>(this, [](auto){}),
     std::chrono::seconds(5));
@@ -35,13 +42,23 @@ LogViewerBase::LogViewerBase(const rclcpp::NodeOptions & options)
 
 void LogViewerBase::log_callback(const rcl_interfaces::msg::Log::SharedPtr msg)
 {
-  if (is_paused()) {return;}
-  if (excluded_names_.find(msg->name) != excluded_names_.end()) {return;}
+  if (is_paused()) {
+    return;
+  }
+  
+  if (excluded_names_.find(msg->name) != excluded_names_.end()) {
+    return;
+  }
+  if (msg->msg.empty()) {
+    return;
+  }
 
-  std::string msg_line = msg->msg;
-
-  std::lock_guard<std::mutex> lock(pending_logs_mutex_);
-  pending_logs_.push_back(*msg);
+  auto log_copy = std::make_shared<rcl_interfaces::msg::Log>(*msg);
+  
+  {
+    std::lock_guard<std::mutex> lock(pending_logs_mutex_);
+    pending_logs_.push_back(*log_copy);
+  }
 }
 
 std::string LogViewerBase::convert_to_string(const rcl_interfaces::msg::Log & msg)
@@ -104,13 +121,46 @@ boost::circular_buffer<rcl_interfaces::msg::Log> LogViewerBase::get_filtered_log
   const std::vector<std::string>& node_names)
 {
   boost::circular_buffer<rcl_interfaces::msg::Log> filtered_logs(BUFF_SIZE);
-  std::lock_guard<std::mutex> lock(pending_logs_mutex_);
+  boost::circular_buffer<rcl_interfaces::msg::Log> logs_copy;
+  {
+    std::lock_guard<std::mutex> lock(pending_logs_mutex_);
+    logs_copy = boost::circular_buffer<rcl_interfaces::msg::Log>(pending_logs_);
+  }
   
-  for (const auto & log : pending_logs_) {
-    if (std::find(node_names.begin(), node_names.end(), log.name) != node_names.end()) {
+  for (const auto & log : logs_copy) {
+    bool log_matches = false;
+    
+    if (node_names.empty()) {
+      log_matches = true;
+    } else {
+      for (const auto& requested_node : node_names) {
+        if (requested_node.empty()) {
+          continue;
+        }
+        
+        if (log.name == requested_node) {
+          log_matches = true;
+          break;
+        }
+        
+        if (requested_node[0] == '/' && 
+            log.name == requested_node.substr(1)) {
+          log_matches = true;
+          break;
+        }
+        
+        if (log.name == '/' + requested_node) {
+          log_matches = true;
+          break;
+        }
+      }
+    }
+    
+    if (log_matches) {
       filtered_logs.push_back(log);
     }
   }
+  
   return filtered_logs;
 }
 

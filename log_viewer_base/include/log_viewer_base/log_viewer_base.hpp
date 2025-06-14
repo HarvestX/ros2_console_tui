@@ -15,17 +15,16 @@
 #ifndef LOG_VIEWER_BASE__LOG_VIEWER_BASE_HPP_
 #define LOG_VIEWER_BASE__LOG_VIEWER_BASE_HPP_
 
-#include <ncurses.h>
-#include <yaml-cpp/yaml.h>
-
-#include <boost/circular_buffer.hpp>
 #include <filesystem>
 #include <mutex>
-#include <rcl_interfaces/msg/log.hpp>
-#include <rclcpp/rclcpp.hpp>
 #include <set>
 #include <string>
 #include <utility>
+
+#include <boost/circular_buffer.hpp>
+#include <rcl_interfaces/msg/log.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <yaml-cpp/yaml.h>
 
 #include "log_viewer_base/log_types.hpp"
 #include "log_viewer_base/graph_inspector.hpp"
@@ -53,7 +52,8 @@ public:
   }
   boost::circular_buffer<rcl_interfaces::msg::Log> get_pending_logs()
   {
-    return pending_logs_;
+    std::lock_guard<std::mutex> lock(pending_logs_mutex_);
+    return boost::circular_buffer<rcl_interfaces::msg::Log>(pending_logs_);
   }
   
   boost::circular_buffer<rcl_interfaces::msg::Log> get_filtered_logs(
@@ -68,7 +68,6 @@ public:
   const std::vector<std::string>& get_filtered_node_names() const { return filtered_node_names_; }
   const std::vector<std::string>& get_filtered_namespace_names() const { return filtered_namespace_names_; }
   
-  // Graph inspector functions
   void update_graph();
   std::vector<GraphInspector::NodeInfo> get_nodes() const;
   std::map<std::string, std::vector<std::string>> get_topics() const;
@@ -85,11 +84,9 @@ private:
   boost::circular_buffer<rcl_interfaces::msg::Log> pending_logs_;
   bool now_pause_ = false;
   
-  // Node and namespace filtering
   std::vector<std::string> filtered_node_names_;
   std::vector<std::string> filtered_namespace_names_;
   
-  // Graph inspector for node information
   std::unique_ptr<GraphInspector> graph_inspector_;
 };
 
