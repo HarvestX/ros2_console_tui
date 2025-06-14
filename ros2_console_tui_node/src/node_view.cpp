@@ -105,7 +105,7 @@ void LogViewerTui::draw_node_window()
     draw_line("  No active nodes found.");
   } else {
     for (const auto& node : nodes) {
-      draw_line("  Node: " + node.name + ", Namespace: " + node.ns);
+      draw_line("  Node: " + node.full_name, 2);
     }
   }
   draw_line("");
@@ -350,8 +350,11 @@ bool LogViewerTui::should_display_from_node(const std::string& node_name)
   
   auto nodes = get_nodes();
   for (size_t i = 0; i < nodes.size() && i < selected_nodes_.size(); ++i) {
+    auto node_name_copy = "/" + node_name;
+    std::replace(node_name_copy.begin(), node_name_copy.end(), '.', '/');
+
     if (selected_nodes_[i] && 
-        (nodes[i].full_name.substr(1) == node_name)) {
+        (nodes[i].full_name == node_name_copy)) {
       return true;
     }
   }
