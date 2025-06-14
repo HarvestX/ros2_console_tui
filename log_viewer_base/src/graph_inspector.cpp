@@ -63,22 +63,18 @@ void GraphInspector::collect_data(const rclcpp::node_interfaces::NodeGraphInterf
       }
     }
   }
-  
-  // Process nodes and their connections
+
   if (node_names_result) {
     for (const auto& node_pair : *node_names_result) {
       const std::string& name = node_pair.first;
       const std::string& ns = node_pair.second;
       std::string full_name = get_full_node_name(ns, name);
       
-      // Skip our own node
       if (full_name == my_full_node_name_) {
         continue;
       }
       
       NodeInfo node_info;
-      node_info.name = name;
-      node_info.ns = ns;
       node_info.full_name = full_name;
       
       // Get publishers for this node
@@ -110,11 +106,8 @@ void GraphInspector::collect_data(const rclcpp::node_interfaces::NodeGraphInterf
           }
         }
       }
-      
-      // Only add nodes that have publishers or subscribers
-      if (!node_info.publishers.empty() || !node_info.subscribers.empty()) {
-        nodes_.push_back(node_info);
-      }
+
+      nodes_.push_back(node_info);
     }
   }
   

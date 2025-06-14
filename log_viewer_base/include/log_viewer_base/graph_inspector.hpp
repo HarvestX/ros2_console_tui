@@ -26,8 +26,6 @@ class GraphInspector {
 public:
   // Node data structure to store connection information
   struct NodeInfo {
-    std::string name;
-    std::string ns;
     std::string full_name;
     std::map<std::string, std::vector<std::string>> publishers;    // topic -> message types
     std::map<std::string, std::vector<std::string>> subscribers;   // topic -> message types
@@ -78,12 +76,10 @@ private:
   }
 
   std::string get_full_node_name(const std::string& ns, const std::string& name) {
-    std::string full_name = ns;
-    if (!full_name.empty() && full_name.back() != '/') {
-      full_name += '/';
+    if (ns == "/") {
+      return "/" + name;
     }
-    full_name += name;
-    return full_name;
+    return ns + "/" + name;
   }
   
   void collect_data(const rclcpp::node_interfaces::NodeGraphInterface::SharedPtr& node_graph);
