@@ -67,8 +67,10 @@ std::string LogViewerBase::convert_to_string(const rcl_interfaces::msg::Log & ms
     return "";
   }
 
-  return "[" + msg.name + "] [" + level_to_string(static_cast<LogLevel>(msg.level)) + "] " +
-         std::to_string(msg.stamp.sec) + "." + std::to_string(msg.stamp.nanosec);
+  return "[" + level_to_string(static_cast<LogLevel>(msg.level)) + "] [" 
+         + std::to_string(msg.stamp.sec) + "."
+         + std::to_string(msg.stamp.nanosec) + "] ["
+         + msg.name + "]: " + msg.msg;
 }
 
 bool LogViewerBase::is_paused() const
